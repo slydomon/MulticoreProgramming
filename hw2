@@ -1,0 +1,92 @@
+1.
+semaphore = sem_open("/semaphore", O_CREAT, 0644 ,1);
+
+void lock(){
+	sem_wait(semaphore);
+}
+
+void unlock(){
+	sem_post(semaphore);
+}
+
+2.
+Basically, it refers to the case that waiting thread miss its chance to be waked because the one who is supposed to wake it up send the wake-up signal before the waiting thread is ready for taking wake-up signal.
+
+3.
+Basically, if we do not consider the case that some threads perform I/O operation, it should be 8, for each core can utilize hyper-threading technology to allow two thread execute in parallel fashion.
+But, if we consider that some threads perform I/O, therefore leading them to sleep while waiting I/O to finish, we should spawn more than 8 in order to keep CPU busy.
+
+4.
+
+//static variable will be shared by every thread and therefore need to resolve the synchronization issue.
+
+static double sum_stat_a = 0; 
+static double sum_stat_b = 0; 
+static double sum_stat_c = 1000; 
+
+int aggregateStats(double stat_a, double stat_b, double stat_c) { 
+	pthread_mutex_lock(lock) ;
+sum_stat_a += stat_a ;
+sum_stat_b -= stat_b;  //w
+sum_stat_c -= stat_c;  //w
+pthread_mutex_unlock(lock) ;
+return sum_stat_a + sum_stat_b + sum_stat_c;  
+} 
+
+
+void init(void) { 
+	pthread_mutex_t lock;
+}
+ 
+5.
+
+static double sum_stat_a = 0; 
+static double sum_stat_b = 0; 
+static double sum_stat_c = 1000; 
+
+int aggregateStats(double stat_a, double stat_b, double stat_c) {
+	if(static_a != 0){
+		pthread_mutex_lock(lock_a) ; 
+sum_stat_a += stat_a ;
+pthread_mutex_unlock(lock_a) ;
+}
+if(static_b != 0){
+	pthread_mutex_lock(lock_b) ;
+sum_stat_b -= stat_b;  //w
+pthread_mutex_unlock(lock_b) ;
+}
+if(static_c != 0){
+	pthread_mutex_lock(lock_c) ;
+sum_stat_c -= stat_c;  //w
+pthread_mutex_unlock(lock_c) ;
+	}
+return sum_stat_a + sum_stat_b + sum_stat_c;  
+} 
+
+
+void init(void) { 
+	pthread_mutex_t lock_a ;
+	pthread_mutex_t lock_b ;
+	pthread_mutex_t lock_c ;
+}
+
+6.
+a.
+The lock and unlock functions should be atomic and only one thread can acquire a specific lock. 
+Help avoid race condition
+Help avoid deadlock
+Fairness
+
+b.
+The lock and unlock functions should be
+Help avoid race condition
+Help avoid deadlock
+Fairness
+
+
+7.
+Busy wait is a process that program keep checking whether it fulfills certain conditions by looping.
+
+Pro: as soon as the condition is met, it will take the corresponding actions.
+Con: keep consuming CPU resource just for waiting the conditions to be met.
+
