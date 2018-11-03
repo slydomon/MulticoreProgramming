@@ -13,8 +13,11 @@
 #include <chrono>
 #include <time.h>
 #include <thread>
+#include <condition_variable>
 
 using namespace std ;
+
+static const double range = 10.0 ;
 
 typedef void* (*thread_func_ptr)(void*) ;
 
@@ -47,7 +50,7 @@ static vector<double> find_coefficient(const vector<pair<int, int> >& points, do
 	double cur ;
 	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
   	std::default_random_engine generator (seed);
-  	uniform_real_distribution<double> distribution(-1000.0, 1000.0);
+  	uniform_real_distribution<double> distribution(-range, range);
 
   	//generate the ascending value
 	do{
@@ -80,23 +83,75 @@ static void * thread_start(void *arg){
 	return (void*)tmp ;	
 }
 
+#include <mutex>
+#include <condition_variable>
+
+class semaphore
+{
+private:
+    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER ;
+    pthread_cond_t cond;
+    unsigned int count = 1; // Initialized as locked.
+
+public:
+	semaphore(){
+		pthread_cond_init(&cond, NULL) ;
+	}
+
+    void sem_post() {
+    	cout << "sem_post wait for lock" << endl;
+        pthread_mutex_lock(&lock);
+        cout << "sem_post hold the lock" << endl;
+        ++count;
+        //cout << count << endl;
+        pthread_cond_signal(&cond);
+        pthread_mutex_unlock(&lock) ;
+        cout << "sem_post release the lock" << endl;
+    }
+
+    void sem_wait() {
+    	//cout << "count" << count << endl ;
+    	cout << "sem_wait wait for lock" << endl;
+        pthread_mutex_lock(&lock) ;
+        cout << "sem_wait hold the lock" << endl;
+        //cout << "count" << count << endl ;
+        bool flag = true ;
+        //cout << count << endl; 
+        --count;
+        while(!count){ // Handle spurious wake-ups.
+        	cout << "sem_wait is wait for signal and release lock" <<endl; 
+            if(pthread_cond_wait(&cond, &lock) == -1) perror("sem_wait: cond_wait");
+            flag = false ;
+            cout << "sem_wait is awake" << endl; 
+        }
+        if(!flag) return ;
+        if(pthread_mutex_unlock(&lock) == -1) perror("sem_wait: unlock");
+        cout << "sem_wait release the lock" << endl;
+        return ;
+        //cout << "exit" << endl ;
+    }
+
+    long get_count(){
+    	return count;
+    }
+};
+
 template<typename T>
 class ThreadSafeListenerQueue{
 public:
 	static pthread_mutex_t name_lock ;
 	static int sema_name ;
-
 	ThreadSafeListenerQueue<T>(){
+		//increment the count to acquire the new name for semaphore.
 		pthread_mutex_lock(&name_lock) ;
 		int tmp = sema_name ;
 		++sema_name ;
 		pthread_mutex_unlock(&name_lock) ;
-		//n=sprintf (buffer, "%d plus %d is %d", a, b, a+b);
-		char name[25] ;
 		sprintf(name, "/semaphore_%d", tmp) ;
-		printf("%s \n", name) ;
-		sem_unlink(name) ; //very important: semaphore make sure we do not use the old, contaminated one.
-		semaphore = sem_open(name, O_CREAT|O_EXCL, S_IRWXU , 0);
+		//printf("%s \n", name) ;
+		if(sem_unlink(name) == -1)
+			perror("constructor: sema_unlink") ; //very important: semaphore make sure we do not use the old, contaminated one.
+		semaphore = sem_open(name, O_CREAT|O_EXCL, S_IRWXU|S_IWUSR , 0) ;
 		if(semaphore == SEM_FAILED){
 		    perror("open semaphore fail!!");
 		    exit(0);
@@ -117,15 +172,20 @@ public:
 	~ThreadSafeListenerQueue<T>(){
 		//semaphore is just like pipe that will be initialized as a file
 		//and should be close and deleted after being used.
-		sem_close(semaphore);
-		sem_unlink("/semaphore") ;
+		if(sem_close(semaphore) == -1)
+			perror("distructor sem_close: ");
+		if(sem_unlink(name) == -1)
+			perror("distructor sem_unlink: ") ;
+			
 	}
 
 	bool push(const T& element){
 		//pthread_mutex_lock(&lock) ;
 		//cout << "push" << endl ;
 		q.push_back(element) ;
-		sem_post(semaphore);
+		if(sem_post(semaphore) == -1)
+			perror("push sem_post: ");
+		//sema.sem_post() ;
 		//pthread_mutex_unlock(&lock) ;
 		return true ; 
 	}
@@ -149,13 +209,16 @@ public:
 	}
 	bool listen(T& element){
 		pthread_mutex_lock(&lock) ;
-		if(sem_wait(semaphore) != 0){
+		if(sem_wait(semaphore) == -1){
 			perror("listen: ") ;
 			exit(0) ;
 		}
-		element = q.front() ;
-		if(!q.empty())
+		//sema.sem_wait() ;
+		//cout << "count: " << sema.get_count() << endl ;
+		if(!q.empty()){
+			element = q.front() ;
 			q.pop_front() ;
+		}
 		else{
 			cout << "Listen: pop fail: queue is empty" <<endl ;
 			exit(0) ;
@@ -164,18 +227,20 @@ public:
 		return true ;
 	}
 
-	T front(){
+	// need to figure out a way to fix this buggy function.
+	/*T front(){
 		pthread_mutex_lock(&lock) ;
 		T tmp ;
 		if(!q.empty())
 			tmp = q.front() ;
 		else{
-			cout << "queue is empty" << endl ;
-			exit(0) ;
+			cout << "Front: queue is empty" << endl ;
+			return NULL;
 		}
 		pthread_mutex_unlock(&lock) ;
 		return tmp ;
 	}
+	*/
 
 	//be careful to use this function since it only guarantee the current size;
 	int size(){
@@ -183,7 +248,9 @@ public:
 	}
 private:
 	list<T> q ;
-	sem_t* semaphore;
+	//semaphore sema;
+	sem_t* semaphore ;
+	char name[25] ;
 	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER ;
 };
 
@@ -269,21 +336,30 @@ public:
 	*/
 
 	task* thread_pool_aggregate(cmp my_cmp){
+		pthread_mutex_lock(&complete_q_lock) ;
 		int size = complete.size() ;
-		task* res ;
-		if(size == 0)
-			return NULL ;
-		if(size == 1){
-			return complete.front() ;
-		}
-		else{
-			for(int i = 0 ; i < size ; ++i){
+		task* res = nullptr ;
+		if(size > 1){
+			//cout << "agg case2" <<endl ;
+			for(int i = 0 ; i < size-1 ; ++i){
+
 				task* t1 ;
-				complete.pop(t1) ;
-				res = complete.front() ;
+				if(!complete.pop(t1))
+				{ 
+					cout << "thread_pool_aggregate_at_least: first pop fail, complete q is empty, return null" << endl ;
+					return res ;
+				}
+				if(!complete.pop(res)){ 
+					cout << "thread_pool_aggregate_at_least: second pop fail, return t1" << endl ;
+					complete.push(res) ;
+					return t1;
+				}
+				//res = complete.front() if fixed, it can improve performance
 				res = my_cmp(t1, res) ;
+				complete.push(res) ;
 			}
 		}
+		pthread_mutex_unlock(&complete_q_lock) ;
 		return res; 
 	}
 
@@ -291,18 +367,28 @@ public:
 		estimate_time_per_task->tv_sec *= batch_volume ;
 		estimate_time_per_task->tv_nsec *= batch_volume ;
 		nanosleep(estimate_time_per_task, NULL) ; //in order to successfully execute the batch.
+		task* res = nullptr ;
+		pthread_mutex_lock(&complete_q_lock) ;
 		int size = complete.size() ;
-		task* res ;
-		if(size < batch_volume)
-			return NULL ;
-		else{
-			for(int i = 0 ; i < size ; ++i){
+		if(size > batch_volume){
+			for(int i = 0 ; i < size-1 ; ++i){
 				task* t1 ;
-				//complete.pop(t1) ;
+				if(!complete.pop(t1))
+				{ 
+					cout << "thread_pool_aggregate_at_least: first pop fail, complete q is empty" << endl ;
+					return res ;
+				}
+				if(!complete.pop(res)){ 
+					cout << "thread_pool_aggregate_at_least: second pop fail, return t1" << endl ;
+					complete.push(res) ;
+					return t1;
+				}
 				//res = complete.front() ;
-				//res = my_cmp(t1, res) ;
+				res = my_cmp(t1, res) ;
+				complete.push(res) ;
 			}
 		}
+		pthread_mutex_unlock(&complete_q_lock) ;
 		return res ;
 	}
 
@@ -317,18 +403,22 @@ public:
 			thread_func_ptr job = t->get_job() ;
 			tmp = job(t->get_input()) ;
 			t->set_output(tmp) ;
+			pthread_mutex_lock(&complete_q_lock) ;
 			complete.push(t) ;
+			pthread_mutex_unlock(&complete_q_lock) ;
 		}
-		cout << "exit" << endl ;
 		return NULL ;
 	}
 
 	void add_task(task* t){
+		//debug:
+		//cout << "add_task" << endl;
 		pending.push(t) ;
-		pthread_mutex_lock(&id_lock) ;
+		//cout << "push task" << endl ;
+		/*pthread_mutex_lock(&id_lock) ;
 		t->set_id(id) ; 
 		thread_pool::update_id() ;
-		pthread_mutex_unlock(&id_lock) ;
+		pthread_mutex_unlock(&id_lock) ;*/
 	}
 
 	//if ture, task is dispatched ; if false, there is no task in pending 
@@ -353,26 +443,29 @@ public:
 	}
 
 	list<task*> get_complete_task(){
-		return pending.get_list() ;
+		pthread_mutex_lock(&complete_q_lock) ;
+		return complete.get_list() ;
+		pthread_mutex_unlock(&complete_q_lock) ;
 	}
 private:
 	//private data
 	ThreadSafeListenerQueue<task*> pending ;
 	ThreadSafeListenerQueue<task*> complete ;
+	pthread_mutex_t complete_q_lock = PTHREAD_MUTEX_INITIALIZER ;
 	int thread_num ;
-	pthread_mutex_t continue_lock ;
+	pthread_mutex_t continue_lock = PTHREAD_MUTEX_INITIALIZER ;
 	bool proceed = true ;
-	pthread_mutex_t id_lock ;
+	//pthread_mutex_t id_lock = PTHREAD_MUTEX_INITIALIZER ;
 	int id = 0 ;
 	pthread_t* threads;
 	//cmp user_cmp_func = NULL ;
 
 	//private function
-	void update_id(){
+	/*void update_id(){
 		pthread_mutex_lock(&id_lock) ;
 		++id ;
 		pthread_mutex_unlock(&id_lock) ;
-	}
+	}*/
 
 	static void* run_dispatching(void* arg){
 		thread_pool* tmp = reinterpret_cast<thread_pool*>(arg);
@@ -393,7 +486,7 @@ static void get_best(task* t, double& current_best){
 		double best = tmp->at(last-1) ;
 		if(best > 0 && best < current_best){
 			current_best = best ;
-			//cout << "update: " << current_best << endl;
+			cout << "update: " << current_best << endl;
 		}
 	}
 	return ; 
@@ -401,7 +494,7 @@ static void get_best(task* t, double& current_best){
 
 //double current_best = 0.01;
 
-static const double BENCHMARK = 10 ;
+static const double BENCHMARK = 0.1;
 static double current_best = 10000 ;
 template<>
 pthread_mutex_t ThreadSafeListenerQueue<task*>::name_lock = PTHREAD_MUTEX_INITIALIZER ;
@@ -435,11 +528,12 @@ int main(int argc, char** argv){
 	//main thread keeps updating until it meet the requirement. 
 	timespec* time_rest = new timespec() ; 
 	time_rest->tv_sec = 0;
-	time_rest->tv_nsec = 111111 ;
+	time_rest->tv_nsec = 11111111 ;
 
     do{
-  		task* tmp = pool.thread_pool_aggregate_at_least(my_cmp, 100, time_rest) ;
-  		//get_best(tmp, current_best) ;
+  		task* tmp = pool.thread_pool_aggregate_at_least(my_cmp, 20, time_rest) ;
+  		//task* tmp = pool.thread_pool_aggregate(my_cmp) ;
+  		get_best(tmp, current_best) ;
   		thread_info* input = new thread_info() ;
 	    input->points.push_back(pair<int, int>(1, 3)) ;
 	    input->points.push_back(pair<int, int>(10, 4)) ;
@@ -447,12 +541,12 @@ int main(int argc, char** argv){
 	   	//input->points.push_back(pair<int, int>(-4, 5)) ;
   		input->current_best = current_best ;
   		pool.add_task(new task((void*)input, thread_start)) ;
-  		//pool.add_task(tmp) ;
-
+  		//nanosleep(time_rest, NULL) ;
+  		//sleep(1);
     }while(abs(current_best) > BENCHMARK) ;
 	
     pool.thread_pool_stop() ;
-    cout << "end:"  << current_best << endl;
+    cout << "main end:"  << current_best << endl;
 	
 	return 0 ;
 }

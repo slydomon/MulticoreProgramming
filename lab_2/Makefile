@@ -6,7 +6,8 @@ CXXFLAGS += -std=c++11
 CXXFLAGS += -stdlib=libc++
 CXXFLAGS += -lgtest
 CXXFLAGS += -lpthread
-CXXFLAGS += -v
+#CXXFLAGS += -lrt
+#CXXFLAGS += -v
 
 TEST = test.o
 LAB2 = lab2.o 
