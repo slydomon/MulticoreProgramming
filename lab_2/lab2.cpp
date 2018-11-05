@@ -1,11 +1,11 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
-#include <list>
+//#include <list>
 #include <pthread.h>
 #include <iostream>
 #include <unistd.h>
-#include <semaphore.h>
+//#include <semaphore.h>
 #include <fcntl.h>           /* For O_* constants */
 #include <sys/stat.h>        /* For mode constants */
 #include <random>
@@ -13,11 +13,20 @@
 #include <chrono>
 #include <time.h>
 #include <thread>
+#include <deque> 
 #include <condition_variable>
+#include <mutex>
 
 using namespace std ;
 
-static const double range = 10.0 ;
+/***********************************global**********************************/
+static double BENCHMARK = 0.1;
+static double current_best = 10000 ;
+static int NUM_THREADS = 1 ;
+static int dimension = 3 ;
+static double l_bound = -10.0 ;
+static double up_bound = 10.0 ;
+
 
 typedef void* (*thread_func_ptr)(void*) ;
 
@@ -26,23 +35,54 @@ typedef struct thread_info {
     double current_best ;
 }thread_info;
 
+//get the command-line optional
 static int get_opt(int argc, char** argv){
 	int res = 1 ; 
     int opt ;
-    while ((opt = getopt(argc,argv,"n:")) != EOF)
-    	//get the optional argument into sname
-	res = stoi(optarg) ; 
+    while ((opt = getopt(argc,argv,"n:d:t:b:l:u:h")) != EOF){
+    	switch(opt)
+        {
+            case 'n': 
+                NUM_THREADS = stoi(optarg) ; 
+                break;
+            case 'd':
+            	dimension = stoi(optarg) ; 
+                break;
+            case 't': 
+            	BENCHMARK = stod(optarg, NULL) ;
+            	break ; 
+            case 'l':
+            	l_bound = stod(optarg, NULL) ;
+            	break ;
+            case 'u':
+            	up_bound = stod(optarg, NULL) ;
+            	break ;
+            case 'h':
+            	cout << "-n ($int) to specify number of threads in threads pool; default: 1" << endl; 
+            	cout << "-d ($int) to specify the dimension of the polynomial function; defult: 2" << endl ;
+            	cout << "-t ($double) to specify the tolerance of the solution; default: 0.1" << endl ;
+            	cout << "-l ($double) to specify the lower_bound of the solution; default: -10.0" << endl; 
+            	cout << "-u ($double) to specify the upper_bound of the solution; default: 10.0" << endl ;
+            	exit(0) ;
+            	break ;
+            default: 
+            	cout << "The program will use the default setup, unspecified optional" << endl ;
+            	break ;
+        }
+    }
+	/*res = stoi(optarg) ; 
 	if(res < 0){
 		cout << "Number of thread should be greater than 0." << endl;
 		abort() ;
 	}else if(res == 0)
 		return 1 ;
 	else
-    	return res ; 
+    	return res ; */
+    return 0 ;
 }
 
+//user-define job
 static vector<double> find_coefficient(const vector<pair<int, int> >& points, double& recent_best){
-	//srand (time(NULL));
 	int size = points.size() ;
 	vector<double> coefficients(size , 0.0f) ;
 	double result ;
@@ -50,7 +90,7 @@ static vector<double> find_coefficient(const vector<pair<int, int> >& points, do
 	double cur ;
 	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
   	std::default_random_engine generator (seed);
-  	uniform_real_distribution<double> distribution(-range, range);
+  	uniform_real_distribution<double> distribution(l_bound, up_bound);
 
   	//generate the ascending value
 	do{
@@ -67,101 +107,69 @@ static vector<double> find_coefficient(const vector<pair<int, int> >& points, do
 				cur = cur * points[i].first ;
 			}
 			result = result + abs(points[i].second - tmp) ;
-		}
-		//cout << fixed << result << endl;   	
+		}  	
     }while(result > recent_best) ;
-    //cout << fixed << "last_best: " << recent_best << " update: " << result << endl;
     recent_best = result ;
 	coefficients.push_back(result) ;
 	return coefficients ;
 }
 
-//wrapper function to invoke the real job.
+/*
+wrapper function to invoke the real job: The return value will be set as the output of the current task and
+the task will be pushed into "complete queue" for further retrieval.
+*/
 static void * thread_start(void *arg){
 	thread_info* info = (thread_info*)arg ;;
 	vector<double>* tmp = new vector<double>(find_coefficient(info->points, info->current_best)) ;
 	return (void*)tmp ;	
 }
 
-#include <mutex>
-#include <condition_variable>
-
-class semaphore
+//contain: input, job(function pointer), and output for generic purpose.
+class task
 {
-private:
-    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER ;
-    pthread_cond_t cond;
-    unsigned int count = 1; // Initialized as locked.
-
 public:
-	semaphore(){
-		pthread_cond_init(&cond, NULL) ;
+	task() ;
+
+	task(void* _input, thread_func_ptr _job)
+	{ 
+		input = _input;
+		job = _job;
 	}
 
-    void sem_post() {
-    	cout << "sem_post wait for lock" << endl;
-        pthread_mutex_lock(&lock);
-        cout << "sem_post hold the lock" << endl;
-        ++count;
-        //cout << count << endl;
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&lock) ;
-        cout << "sem_post release the lock" << endl;
-    }
+	task(const task& t)
+	{	
+		input = t.input; 
+		job = t.job;
+	}
 
-    void sem_wait() {
-    	//cout << "count" << count << endl ;
-    	cout << "sem_wait wait for lock" << endl;
-        pthread_mutex_lock(&lock) ;
-        cout << "sem_wait hold the lock" << endl;
-        //cout << "count" << count << endl ;
-        bool flag = true ;
-        //cout << count << endl; 
-        --count;
-        while(!count){ // Handle spurious wake-ups.
-        	cout << "sem_wait is wait for signal and release lock" <<endl; 
-            if(pthread_cond_wait(&cond, &lock) == -1) perror("sem_wait: cond_wait");
-            flag = false ;
-            cout << "sem_wait is awake" << endl; 
-        }
-        if(!flag) return ;
-        if(pthread_mutex_unlock(&lock) == -1) perror("sem_wait: unlock");
-        cout << "sem_wait release the lock" << endl;
-        return ;
-        //cout << "exit" << endl ;
-    }
+	~task(){
+		if(input) delete input ;
+		if(output) delete output ;
+	} ;
 
-    long get_count(){
-    	return count;
-    }
+	const thread_func_ptr get_job(){return job ;}
+	void* get_input(){return input ;}
+	const void* get_output(){return output ;}
+	const void set_output(void* out){output = out; } 
+	const void set_id(const int& _id){id = _id ;} 
+private:
+	int id ;
+	void* input = nullptr ;
+	void* output = nullptr ;
+	thread_func_ptr job ;
 };
 
 template<typename T>
-class ThreadSafeListenerQueue{
+class ThreadSafeListenerQueue2{
 public:
-	static pthread_mutex_t name_lock ;
-	static int sema_name ;
-	ThreadSafeListenerQueue<T>(){
-		//increment the count to acquire the new name for semaphore.
-		pthread_mutex_lock(&name_lock) ;
-		int tmp = sema_name ;
-		++sema_name ;
-		pthread_mutex_unlock(&name_lock) ;
-		sprintf(name, "/semaphore_%d", tmp) ;
-		//printf("%s \n", name) ;
-		if(sem_unlink(name) == -1)
-			perror("constructor: sema_unlink") ; //very important: semaphore make sure we do not use the old, contaminated one.
-		semaphore = sem_open(name, O_CREAT|O_EXCL, S_IRWXU|S_IWUSR , 0) ;
-		if(semaphore == SEM_FAILED){
-		    perror("open semaphore fail!!");
-		    exit(0);
-		}
+
+	ThreadSafeListenerQueue2<T>(){
+		pthread_cond_init(&cond, NULL) ;
 	}
 
-	list<T> get_list(){
+	deque<T> get_list(){
 		pthread_mutex_lock(&lock) ;
-		//int size = q.size() ;
-		list<T> copy ;
+		deque<T> copy ;
 		for(auto it = q.begin() ; it != q.end() ; ++it){
 			copy.push_back(*it) ;
 		}
@@ -169,24 +177,14 @@ public:
 		return copy ;
 	}
 
-	~ThreadSafeListenerQueue<T>(){
-		//semaphore is just like pipe that will be initialized as a file
-		//and should be close and deleted after being used.
-		if(sem_close(semaphore) == -1)
-			perror("distructor sem_close: ");
-		if(sem_unlink(name) == -1)
-			perror("distructor sem_unlink: ") ;
-			
-	}
+	~ThreadSafeListenerQueue2<T>(){}
 
 	bool push(const T& element){
-		//pthread_mutex_lock(&lock) ;
-		//cout << "push" << endl ;
+		pthread_mutex_lock(&lock) ;
 		q.push_back(element) ;
-		if(sem_post(semaphore) == -1)
-			perror("push sem_post: ");
-		//sema.sem_post() ;
-		//pthread_mutex_unlock(&lock) ;
+		this->increment_count() ;
+		pthread_cond_signal(&cond) ;
+		pthread_mutex_unlock(&lock) ;
 		return true ; 
 	}
 	bool pop(T& element){
@@ -196,9 +194,15 @@ public:
 			return false ;
 		}
 		else{
-			element = q.front() ;
-			if(!q.empty())
+			if(!q.empty()){
+				if(!this->decrement_count()){
+					cout << "pop: decrement_count fail, counter is zero" << endl ;
+					pthread_mutex_unlock(&lock) ;
+					return false ;
+				}
+				element = q.front() ;
 				q.pop_front() ;
+			}
 			else{
 				cout << "pop: pop fail: queue is empty" << endl ;
 				exit(0) ;
@@ -209,13 +213,13 @@ public:
 	}
 	bool listen(T& element){
 		pthread_mutex_lock(&lock) ;
-		if(sem_wait(semaphore) == -1){
-			perror("listen: ") ;
-			exit(0) ;
-		}
-		//sema.sem_wait() ;
-		//cout << "count: " << sema.get_count() << endl ;
+		while(!counter)
+			pthread_cond_wait(&cond, &lock) ;
 		if(!q.empty()){
+			if(!this->decrement_count()){
+				cout << "listen: decrement_count fail, counter is zero" << endl ;
+				exit(0) ;
+			}
 			element = q.front() ;
 			q.pop_front() ;
 		}
@@ -227,72 +231,44 @@ public:
 		return true ;
 	}
 
-	// need to figure out a way to fix this buggy function.
-	/*T front(){
+	bool empty(){
 		pthread_mutex_lock(&lock) ;
-		T tmp ;
-		if(!q.empty())
-			tmp = q.front() ;
-		else{
-			cout << "Front: queue is empty" << endl ;
-			return NULL;
-		}
+		bool tmp = q.empty() ;
 		pthread_mutex_unlock(&lock) ;
 		return tmp ;
 	}
-	*/
 
-	//be careful to use this function since it only guarantee the current size;
 	int size(){
 		return q.size() ;
 	}
 private:
-	list<T> q ;
-	//semaphore sema;
-	sem_t* semaphore ;
-	char name[25] ;
+	deque<T> q ;
 	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER ;
+	pthread_cond_t cond ;
+	unsigned long long int counter = 0 ;
+	bool increment_count(){
+    	if(counter < ULLONG_MAX){
+    		counter++ ;
+    		return true ;
+    	}
+    	else{
+    		return false ;
+    	}
+    }
+
+    bool decrement_count(){
+    	if(counter != 0){
+    		counter-- ;
+    		return true ;
+    	}
+    	else{
+    		return false ;
+    	}
+    }
 };
 
-template<class T>
-void printv(vector<T> input){
-	int size = input.size() ;
-	for(int i = 0 ; i < size ; ++i){
-		cout<<fixed ;
-		cout << input[i] << " " ;
-	}
-	cout << endl ;
-}
 
-class task
-{
-public:
-	task() ;
-	task(void* _input, thread_func_ptr _job) //constructor
-	{ 
-		input = _input;
-		job = _job;
-	}
-	task(const task& t) //copy constructor, if task1 = task2 => task1 is task2 rather than the copy of task2.
-	{	
-		input = t.input; 
-		job = t.job;
-	} 
-	~task() ;
-	const thread_func_ptr get_job(){return job ;}
-	void* get_input(){return input ;}
-	const void* get_output(){return output ;}
-	const void set_output(void* out){output = out; } 
-	const void set_id(const int& _id){id = _id ;} 
-	//const void set_output(void* _output){output = _output ;}
-private:
-	int id ;
-	void* input ;
-	void* output ;
-	thread_func_ptr job ;
-};
-
-//user-define compare function
+//user-define compare function: compare which output in the tasks is "better", and return the better one.
 task* my_cmp(task* t1, task* t2){
 	if(!t1 && !t2) return NULL ;
 	else if(!t1) return t2 ;
@@ -324,42 +300,30 @@ public:
 	}
 
 	~thread_pool(){
-		delete threads ;
-		//pending.~ThreadSafeListenerQueue() ;
-		//complete.~ThreadSafeListenerQueue() ;
+		if(threads)
+			delete threads ;
 	}
-
-	/*
-	void thread_pool_set_cmp(cmp my_cmp){
-		user_cmp_func = my_cmp ;
-	}
-	*/
 
 	task* thread_pool_aggregate(cmp my_cmp){
-		pthread_mutex_lock(&complete_q_lock) ;
 		int size = complete.size() ;
 		task* res = nullptr ;
 		if(size > 1){
-			//cout << "agg case2" <<endl ;
 			for(int i = 0 ; i < size-1 ; ++i){
 
 				task* t1 ;
 				if(!complete.pop(t1))
 				{ 
-					cout << "thread_pool_aggregate_at_least: first pop fail, complete q is empty, return null" << endl ;
 					return res ;
 				}
-				if(!complete.pop(res)){ 
-					cout << "thread_pool_aggregate_at_least: second pop fail, return t1" << endl ;
-					complete.push(res) ;
+				if(!complete.pop(res)){  
+					int tmp_s = ((vector<double>*)(t1->get_output()))->size() ;
+					cout << "t1: "<< ((vector<double>*)(t1->get_output()))->at(tmp_s-1) << endl ;
 					return t1;
 				}
-				//res = complete.front() if fixed, it can improve performance
 				res = my_cmp(t1, res) ;
 				complete.push(res) ;
 			}
 		}
-		pthread_mutex_unlock(&complete_q_lock) ;
 		return res; 
 	}
 
@@ -368,27 +332,22 @@ public:
 		estimate_time_per_task->tv_nsec *= batch_volume ;
 		nanosleep(estimate_time_per_task, NULL) ; //in order to successfully execute the batch.
 		task* res = nullptr ;
-		pthread_mutex_lock(&complete_q_lock) ;
 		int size = complete.size() ;
 		if(size > batch_volume){
 			for(int i = 0 ; i < size-1 ; ++i){
 				task* t1 ;
 				if(!complete.pop(t1))
 				{ 
-					cout << "thread_pool_aggregate_at_least: first pop fail, complete q is empty" << endl ;
 					return res ;
 				}
 				if(!complete.pop(res)){ 
-					cout << "thread_pool_aggregate_at_least: second pop fail, return t1" << endl ;
-					complete.push(res) ;
+					complete.push(t1) ;
 					return t1;
 				}
-				//res = complete.front() ;
 				res = my_cmp(t1, res) ;
 				complete.push(res) ;
 			}
 		}
-		pthread_mutex_unlock(&complete_q_lock) ;
 		return res ;
 	}
 
@@ -396,29 +355,18 @@ public:
 	void* dispatching(void* arg){
 		void* tmp ;
 		while(proceed){
-			//debug:
-			//cout << "round" << endl ;
 			task* t = nullptr ;
 			pending.listen(t) ;
 			thread_func_ptr job = t->get_job() ;
 			tmp = job(t->get_input()) ;
 			t->set_output(tmp) ;
-			pthread_mutex_lock(&complete_q_lock) ;
 			complete.push(t) ;
-			pthread_mutex_unlock(&complete_q_lock) ;
 		}
 		return NULL ;
 	}
 
 	void add_task(task* t){
-		//debug:
-		//cout << "add_task" << endl;
 		pending.push(t) ;
-		//cout << "push task" << endl ;
-		/*pthread_mutex_lock(&id_lock) ;
-		t->set_id(id) ; 
-		thread_pool::update_id() ;
-		pthread_mutex_unlock(&id_lock) ;*/
 	}
 
 	//if ture, task is dispatched ; if false, there is no task in pending 
@@ -430,8 +378,6 @@ public:
 
 	void thread_pool_run(){
 		for(int i = 0 ; i < thread_num ; ++i){
-			//debug:
-			//cout << "create_pthread" << endl;
 			this->dispatch_task(i) ;
 		}
 	}
@@ -442,30 +388,16 @@ public:
 		pthread_mutex_unlock(&continue_lock) ;
 	}
 
-	list<task*> get_complete_task(){
-		pthread_mutex_lock(&complete_q_lock) ;
+	deque<task*> get_complete_task(){
 		return complete.get_list() ;
-		pthread_mutex_unlock(&complete_q_lock) ;
 	}
 private:
-	//private data
-	ThreadSafeListenerQueue<task*> pending ;
-	ThreadSafeListenerQueue<task*> complete ;
-	pthread_mutex_t complete_q_lock = PTHREAD_MUTEX_INITIALIZER ;
-	int thread_num ;
+	ThreadSafeListenerQueue2<task*> pending ;
+	ThreadSafeListenerQueue2<task*> complete ;
+	int thread_num  = 1 ;
 	pthread_mutex_t continue_lock = PTHREAD_MUTEX_INITIALIZER ;
 	bool proceed = true ;
-	//pthread_mutex_t id_lock = PTHREAD_MUTEX_INITIALIZER ;
-	int id = 0 ;
-	pthread_t* threads;
-	//cmp user_cmp_func = NULL ;
-
-	//private function
-	/*void update_id(){
-		pthread_mutex_lock(&id_lock) ;
-		++id ;
-		pthread_mutex_unlock(&id_lock) ;
-	}*/
+	pthread_t* threads = nullptr ;
 
 	static void* run_dispatching(void* arg){
 		thread_pool* tmp = reinterpret_cast<thread_pool*>(arg);
@@ -476,10 +408,11 @@ private:
 
 };
 
-//user-defined get best ;
+//user-defined get best: retrieve the current best result;
 static void get_best(task* t, double& current_best){
-	if(t == NULL)
+	if(t == NULL){
 		return ; 
+	}
 	else{
 		vector<double>* tmp = (vector<double>*)((t)->get_output()) ;
 		int last = tmp->size() ;
@@ -492,35 +425,43 @@ static void get_best(task* t, double& current_best){
 	return ; 
 }
 
-//double current_best = 0.01;
-
-static const double BENCHMARK = 0.1;
-static double current_best = 10000 ;
-template<>
-pthread_mutex_t ThreadSafeListenerQueue<task*>::name_lock = PTHREAD_MUTEX_INITIALIZER ;
-
-template<>
-int ThreadSafeListenerQueue<task*>::sema_name = 0 ;
+//make initial input for the following input.
+thread_info* make_input(const int& dimension, const int& current_best){
+	thread_info* input = new thread_info() ;
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+  	std::default_random_engine generator (seed);
+  	uniform_real_distribution<int> distribution(-1, 1);
+	for(int i = 0 ; i < dimension ; ++i){
+		int x = distribution(generator)%10;
+		int y = distribution(generator)%10;
+	    input->points.push_back(pair<int, int>(x, y)) ;
+	}
+	input->current_best = current_best ;
+	return input ;
+}
 
 int main(int argc, char** argv){
-	int NUM_THREADS = get_opt(argc, argv) ;
-	//ThreadSafeListenerQueue<task*>::static_var_initializer() ;
+	//get optional from command
+	get_opt(argc, argv) ;
+	//initialize input.
+	thread_info* input = make_input(dimension, current_best) ;
+	//print out all user-defined variables.
+	cout << "number of threads: "<< NUM_THREADS << endl;  
+	cout << "Dimension: " << dimension << endl ;
+	cout << "Benchmark: " << BENCHMARK << endl ; 
+	cout << "Lower_bound: " << l_bound << endl ; 
+	cout << "upper_bound: " << up_bound << endl ;
+	
 	thread_pool pool(NUM_THREADS) ;
-	//sem_t* semaphore = sem_open("/semaphore", O_CREAT, 0644 , -NUM_THREADS + 2);
+	
     for(int i = 0 ; i < 100 ; ++i){
     	//input initialize:
-    	thread_info* input = new thread_info() ;
-	    input->points.push_back(pair<int, int>(1, 3)) ;
-	    input->points.push_back(pair<int, int>(10, 4)) ;
-	    input->points.push_back(pair<int, int>(-4, 5)) ;
-	    //input->points.push_back(pair<int, int>(-4, 5)) ;
-	    input->current_best = current_best ;
-
+    	thread_info* tmp = new thread_info(); 
+    	tmp->points = input->points ;
+    	tmp->current_best = current_best ;
 	    //task initialize:
-	    pool.add_task(new task((void*)input, thread_start)) ;
+	    pool.add_task(new task((void*)tmp, thread_start)) ;
     }
-
-    //pool.thread_pool_set_cmp(my_cmp) ;
 
     //fire all the thread in the thread pool
 	pool.thread_pool_run() ;
@@ -531,18 +472,13 @@ int main(int argc, char** argv){
 	time_rest->tv_nsec = 11111111 ;
 
     do{
-  		task* tmp = pool.thread_pool_aggregate_at_least(my_cmp, 20, time_rest) ;
-  		//task* tmp = pool.thread_pool_aggregate(my_cmp) ;
+  		//task* tmp = pool.thread_pool_aggregate_at_least(my_cmp, 20, time_rest) ;
+  		task* tmp = pool.thread_pool_aggregate(my_cmp) ;
   		get_best(tmp, current_best) ;
-  		thread_info* input = new thread_info() ;
-	    input->points.push_back(pair<int, int>(1, 3)) ;
-	    input->points.push_back(pair<int, int>(10, 4)) ;
-	   	input->points.push_back(pair<int, int>(-4, 5)) ;
-	   	//input->points.push_back(pair<int, int>(-4, 5)) ;
-  		input->current_best = current_best ;
-  		pool.add_task(new task((void*)input, thread_start)) ;
-  		//nanosleep(time_rest, NULL) ;
-  		//sleep(1);
+  		thread_info* in = new thread_info() ;
+  		in->points = input->points ;
+  		in->current_best = current_best ;
+  		pool.add_task(new task((void*)in, thread_start)) ;
     }while(abs(current_best) > BENCHMARK) ;
 	
     pool.thread_pool_stop() ;
