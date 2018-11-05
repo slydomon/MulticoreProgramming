@@ -26,6 +26,7 @@ static int NUM_THREADS = 1 ;
 static int dimension = 3 ;
 static double l_bound = -10.0 ;
 static double up_bound = 10.0 ;
+static vector<double> solution ;
 
 
 typedef void* (*thread_func_ptr)(void*) ;
@@ -112,6 +113,31 @@ static vector<double> find_coefficient(const vector<pair<int, int> >& points, do
     recent_best = result ;
 	coefficients.push_back(result) ;
 	return coefficients ;
+}
+
+//make initial input for the following input.
+static thread_info* make_input(const int& dimension, const int& current_best){
+	thread_info* input = new thread_info() ;
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+  	std::default_random_engine generator (seed);
+  	uniform_real_distribution<int> distribution(-1, 1);
+	for(int i = 0 ; i < dimension ; ++i){
+		int x = distribution(generator)%10;
+		int y = distribution(generator)%10;
+	    input->points.push_back(pair<int, int>(x, y)) ;
+	}
+	input->current_best = current_best ;
+	return input ;
+}
+
+static void print_sol(const vector<double>& sol){
+	int size = sol.size() ;
+	cout << "final solution(ascending order in exponent): " << endl ;
+	cout << sol[0] ;
+	for(int i = 1 ; i < size-1 ; ++i)
+		cout << " ," << sol[i] ;
+	cout << endl ;
+	cout << "difference: " << sol[size-1] << endl ;
 }
 
 /*
@@ -292,7 +318,6 @@ class thread_pool
 {
 typedef void* (thread_pool::*func_ptr)(void*) ;
 typedef task* (*cmp)(task* t1, task* t2) ;
-
 public:
 	thread_pool(int thread_number){
 		thread_num = thread_number ;
@@ -404,12 +429,10 @@ private:
         tmp->dispatching(NULL);
         return 0;
 	}
-
-
 };
 
 //user-defined get best: retrieve the current best result;
-static void get_best(task* t, double& current_best){
+static void get_best(task* t, double& current_best, vector<double>& sol){
 	if(t == NULL){
 		return ; 
 	}
@@ -419,25 +442,11 @@ static void get_best(task* t, double& current_best){
 		double best = tmp->at(last-1) ;
 		if(best > 0 && best < current_best){
 			current_best = best ;
+			sol = *tmp ;
 			cout << "update: " << current_best << endl;
 		}
 	}
 	return ; 
-}
-
-//make initial input for the following input.
-thread_info* make_input(const int& dimension, const int& current_best){
-	thread_info* input = new thread_info() ;
-	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-  	std::default_random_engine generator (seed);
-  	uniform_real_distribution<int> distribution(-1, 1);
-	for(int i = 0 ; i < dimension ; ++i){
-		int x = distribution(generator)%10;
-		int y = distribution(generator)%10;
-	    input->points.push_back(pair<int, int>(x, y)) ;
-	}
-	input->current_best = current_best ;
-	return input ;
 }
 
 int main(int argc, char** argv){
@@ -446,12 +455,13 @@ int main(int argc, char** argv){
 	//initialize input.
 	thread_info* input = make_input(dimension, current_best) ;
 	//print out all user-defined variables.
-	cout << "number of threads: "<< NUM_THREADS << endl;  
+	cout << "Number of threads: "<< NUM_THREADS << endl;  
 	cout << "Dimension: " << dimension << endl ;
 	cout << "Benchmark: " << BENCHMARK << endl ; 
 	cout << "Lower_bound: " << l_bound << endl ; 
-	cout << "upper_bound: " << up_bound << endl ;
-	
+	cout << "Upper_bound: " << up_bound << endl ;
+	cout << "**********************start calculating**********************"<<endl ;
+
 	thread_pool pool(NUM_THREADS) ;
 	
     for(int i = 0 ; i < 100 ; ++i){
@@ -474,7 +484,7 @@ int main(int argc, char** argv){
     do{
   		//task* tmp = pool.thread_pool_aggregate_at_least(my_cmp, 20, time_rest) ;
   		task* tmp = pool.thread_pool_aggregate(my_cmp) ;
-  		get_best(tmp, current_best) ;
+  		get_best(tmp, current_best, solution) ;
   		thread_info* in = new thread_info() ;
   		in->points = input->points ;
   		in->current_best = current_best ;
@@ -482,7 +492,9 @@ int main(int argc, char** argv){
     }while(abs(current_best) > BENCHMARK) ;
 	
     pool.thread_pool_stop() ;
-    cout << "main end:"  << current_best << endl;
-	
-	return 0 ;
+    //cout << "main end:"  << current_best << endl;
+    print_sol(solution) ;
+
+    exit(0) ;
+    return 0 ;
 }
