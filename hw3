@@ -1,0 +1,40 @@
+1.	
+  The reason to adding sentinel is to maintain the invariant in concurrent queue. 
+  In this case, it makes sure that “enqueue” always modifies the “tail portion” only 
+  and “dequeuer” always modifies the “head portion” only. Under this assumption, it guarantees 
+  the mutual exclusive of data modified by dequeue and enqueue functions, making lock-free possible.
+
+2.	
+  A. Hyperthreading technology emulates two cores by using actually one core hardware.
+  Thus, the user can have 8 threads executing in parallel fashion and minimum bound should be 1 and the maximum should be 5. 
+  The reason is for the minimum 1 is that fast paced game such as Freefire is considered dysfunction, if users have 
+  to suffer from continuously context switch because the game program shares threads with “find prime” function. 
+  The reason for maximum 8 is that you will need to spend extra time on context switch for threads that cannot be executed in parallel fashion.
+  
+  B. For gaming program, responsiveness is more important that throughput. Therefore, we should focus on turnaround time in this part. 
+  However, for finding all prime numbers  within certain range, throughput is more 
+  important than responsiveness, and therefore we should focus on throughput. Thus, system-wide you need to guarantee that 
+  fix resource is allocated to the two different programs since they are not targeting the same goal. 
+  Then. based on those fixed resource, we do different programming optimization. For program focusing on responsiveness, 
+  we can use asynchronous more method together with SJF to schedule threads. For program focusing on throughput, we can utilize batch processing.
+
+3.
+  A. Right after Thread 1 execute the if statement and make sure it is true, Thread 2 modifies the global_thread->proc_info 
+  to nullptr, making potential run-time error occur in Thread 1.
+  
+  B. use mutex to lock before if statement and modification statement of global_thread->proc_info, and unlock after 
+  if statement block and modification statement of global-thread->proc_info. Use CAS to build a spin lock and do the same thing as previous method.
+
+4.
+  A. to seek for more parallel possibility by making granularity smaller as possible.
+  
+  B. In the CAS algorithm, we actually have three things that requires us to update, tail->next, tail, and head. 
+  Each will be update atomically but not mutual exclusively with each other.(while tail is updated, tail->next is updated 
+  simultaneously) if tail->next is updated before tail is, we need to accept the invariant that tail is not always point to the last element.
+
+5. 
+  The advantage of using binary instrument is to acquire more informative information so that it would be easier for programmer to debug. 
+  However, since it is implemented by replace some of the source code with a more informative but verbose code, it will slow down the program a lot. 
+  Also, it cannot retrieve run-time information such as input from keyboard.
+  The advantage of using dynamic binary translation is also to acquire more information but through emulator that can save the program rum-timestate. 
+  It is particular good in the scenario that user does not have source code. The disadvantage of it would be that the program would be slower since it runs on the emulator.
