@@ -11,3 +11,11 @@
 ### 3.If dimension is specified, the program will ramdonly generaten points and calculate the coefficients.
     
     The range of the (x, y) of the random-generated points is from 0 to 9 for simplification.
+    
+### 4.using Makefile to compile the binary.
+
+### 5.after compiling the file, run ./stat.sh to extract the required stat report.
+
+### 6.the report will be in stat.txt file and the column detail is as following: 
+
+    |Threads |Dimension |GuessCount |min time |max time |avg time |total time |.
