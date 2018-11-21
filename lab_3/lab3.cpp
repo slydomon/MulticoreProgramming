@@ -35,6 +35,8 @@ static int dimension = 3 ;
 static float l_bound = -10.0 ;
 static float up_bound = 10.0 ;
 static vector<double> solution ;
+static pthread_mutex_t guess_lock = PTHREAD_MUTEX_INITIALIZER ;
+static int guess = 0 ;
 
 
 typedef void* (*thread_func_ptr)(void*) ;
@@ -84,6 +86,7 @@ static int get_opt(int argc, char** argv){
 
 //user-define job
 static vector<double> find_coefficient(const vector<pair<int, int> >& points, double& recent_best){
+	int guess_local = 0 ;
 	int size = points.size() ;
 	vector<double> coefficients(size , 0.0f) ;
 	double result ;
@@ -110,11 +113,16 @@ static vector<double> find_coefficient(const vector<pair<int, int> >& points, do
 				cur = cur * points[i].first ;
 			}
 			result = result + abs(points[i].second - tmp) ;
-		}	
+		}
+		++guess_local;
+
     }while(result > recent_best) ;
     recent_best = result ;
 	coefficients.push_back(result) ;
 	//coefficients.push_back(max_cofficient) ;
+	pthread_mutex_lock(&guess_lock) ;
+	guess += guess_local ;
+	pthread_mutex_unlock(&guess_lock) ;
 	return coefficients ;
 }
 
@@ -450,9 +458,9 @@ public:
 				//set output.
 				t->set_output(tmp) ;
 				complete.push(t) ;
-				pthread_mutex_lock(&guess_counter_lock) ;
-				++guess_counter ; //not acutually how much time it guess; instead, it is how much "task" it executes.
-				pthread_mutex_unlock(&guess_counter_lock) ;
+				//pthread_mutex_lock(&guess_counter_lock) ;
+				//++guess_counter ; //not acutually how much time it guess; instead, it is how much "task" it executes.
+				//pthread_mutex_unlock(&guess_counter_lock) ;
  
 			}
 			return NULL ;
@@ -616,14 +624,14 @@ int main(int argc, char** argv){
 	    #define MAX 1
 	    #define AVG 2
 	    vector<double> tmp = pool.calculate_time_stat() ;
-	    int counter = pool.get_guess_counter()  ;
+	    //int counter = pool.get_guess_counter()  ;
 	    double total_time = time_span.count() ;
 		#ifdef verbose
 			print_sol(solution) ;
-		    cout << fixed<<"Threads: " << NUM_THREADS <<" Dimension:" << dimension <<" GuessCount: "<< counter <<" time: min:" << tmp[MIN] << " max:" <<tmp[MAX] << " avg:" << tmp[AVG] << " total:" << total_time << endl;
+		    cout << fixed<<"Threads: " << NUM_THREADS <<" Dimension:" << dimension <<" Guesses: "<< guess <<" time: min:" << tmp[MIN] << " max:" <<tmp[MAX] << " avg:" << tmp[AVG] << " total:" << total_time << endl;
 		    cout << "**********************end calculating**********************"<<endl ;
 	    #else
-	    	cout << fixed << NUM_THREADS <<" " << dimension << " " << counter << " " <<tmp[MIN] << " " << tmp[MAX] << " " << tmp[AVG] << " " <<  total_time << endl;
+	    	cout << fixed << NUM_THREADS <<" " << dimension << " " << guess << " " <<tmp[MIN] << " " << tmp[MAX] << " " << tmp[AVG] << " " <<  total_time << endl;
 	    #endif
     
     #endif
