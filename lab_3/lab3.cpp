@@ -115,6 +115,7 @@ static vector<double> find_coefficient(const vector<pair<int, int> >& points, do
 			result = result + abs(points[i].second - tmp) ;
 		}
 		++guess_local;
+		result = result/dimension ;
 
     }while(result > recent_best) ;
     recent_best = result ;
