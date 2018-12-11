@@ -1,0 +1,1 @@
+/usr/local/Cellar/gcc@6/6.4.0_1/bin/g++-6   -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names  CMakeFiles/lab3.dir/lab3.cpp.o  -o lab3 

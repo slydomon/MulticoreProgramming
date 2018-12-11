@@ -1,0 +1,8 @@
+CSCI-GA.3033-017
+Maze library for Lab 4
+by Joe Wingbermuehle
+adapter by Christopher Mitchell, Ph.D.
+
+You should be able to use maze.cc and maze.hpp as-is in your labs. Remember to seed std::rand()
+using std::srand() as shown in maze-demo.cc, or else you'll be solving the same maze every time!
+You may wish to create a child class of Maze capable of displaying your solution path within the maze.
