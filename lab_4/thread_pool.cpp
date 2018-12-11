@@ -32,13 +32,15 @@ genome genome::mix(const genome& mate)
     std::default_random_engine generator (seed);
     std::uniform_int_distribution<int> distribution(0, INT_MAX);
     int slice_index = distribution(generator) % gen_size ;
-    int s ; 
+    int s ;
     if(slice_index >= gen_size-1 || slice_index == 0) s = gen_size / 2;
     else s = slice_index ;
     //first part of gen derives from caller and last part derive mate
     genome res ;
     std::vector<unsigned> tmp = mate.get_genome() ;
-    for(int i = s ; i < gen_size ; ++i) tmp[i] = gen[i] ;
+    //std::vector<unsigned> tmp = this->get_genome() ;
+    //std::vector<unsigned> tmp_m = mate.get_genome() ;
+    for(int i = s ; i < gen_size ; ++i) tmp[i] = gen[i];
     res.set_genome(tmp) ;
     return res; 
 }
@@ -119,23 +121,23 @@ unsigned genome::count_fitness(Maze* maze)
             case STAY:
                 break ; //if start is end, you need to stay to become the fitness
             case LEFT : 
-                //if(cur.col == 0 || maze->get(cur.row, cur.col-1)) ++wall ;
-                if(maze->get(cur.row, cur.col-1)) ++wall ;
+                if(cur.col == 0 || maze->get(cur.row, cur.col-1)) ++wall ;
+                //if(maze->get(cur.row, cur.col-1)) ++wall ;
                 else --cur.col ;
                 break ;
             case RIGHT:
-                //if(cur.col == col_size || maze->get(cur.row, cur.col+1)) ++wall ;
-                if(maze->get(cur.row, cur.col+1)) ++wall ;
+                if(cur.col == col_size || maze->get(cur.row, cur.col+1)) ++wall ;
+                //if(maze->get(cur.row, cur.col+1)) ++wall ;
                 else ++cur.col ;
                 break;
             case UP:
-                //if(cur.row == 0 || maze->get(cur.row-1, cur.col)) ++wall ;
-                if(maze->get(cur.row-1, cur.col)) ++wall ;
+                if(cur.row == 0 || maze->get(cur.row-1, cur.col)) ++wall ;
+                //if(maze->get(cur.row-1, cur.col)) ++wall ;
                 else --cur.row ;
                 break ;
             case DOWN:
-                //if(cur.row == row_size || maze->get(cur.row + 1, cur.col)) ++wall ;
-                if(maze->get(cur.row + 1, cur.col)) ++wall ;
+                if(cur.row == row_size || maze->get(cur.row + 1, cur.col)) ++wall ;
+                //if(maze->get(cur.row + 1, cur.col)) ++wall ;
                 else ++cur.row ;
                 break;
             default:
@@ -143,7 +145,9 @@ unsigned genome::count_fitness(Maze* maze)
                 abort() ;
         }
         //check if reach the end point, if so return 0(the fitness)
-        if(cur.col == end.col && cur.row == end.row) std::cout << "**********fitness_counter::find path*********" << std::endl ;
+        #ifdef debug
+            if(cur.col == end.col && cur.row == end.row) std::cout << "**********fitness_counter::find path*********" << std::endl ;
+        #endif
     }
     dist = abs(static_cast<int>(cur.col - end.col)) + abs(static_cast<int>(cur.row - end.row)) ;
     /*if(dist == 0)
@@ -168,10 +172,10 @@ void genome::count_fitness_debug(Maze* maze) const
     Coord end = maze->getFinish() ;
     unsigned wall = 0 ;
     unsigned dist = 0 ;
-    /*std::vector<unsigned> gene = string_to_vector("44223322224444000000") ;
+    std::vector<unsigned> gene = string_to_vector("442233222244441111114422222200") ;
     std::string s = "" ;
     for(int i = 0 ; i < gen_size ; ++i)
-        s = s + std::to_string(gene[i]) ;*/
+        s = s + std::to_string(gene[i]) ;
 
     int col_size = maze->get_col_size() ;
     int row_size = maze->get_row_size() ;
@@ -179,7 +183,8 @@ void genome::count_fitness_debug(Maze* maze) const
 
     for(int i = 0 ; i < gen_size ; ++i){
         //1 is wall, 0 is path
-        switch(gen[i])
+        //switch(gen[i])
+        switch(gene[i])
         {
             case STAY:
                 break ; //if start is end, you need to stay to become the fitness
