@@ -6,8 +6,8 @@
 #include <iostream>
 #include <unistd.h>
 //#include <semaphore.h>
-#include <fcntl.h>           /* For O_* constants */
-#include <sys/stat.h>        /* For mode constants */
+//#include <fcntl.h>           /* For O_* constants */
+//#include <sys/stat.h>        /* For mode constants */
 #include <random>
 #include <cfloat>
 #include <chrono>
@@ -19,12 +19,15 @@
 #include <iostream>
 #include <ctime>
 #include <ratio>
+#include <climits>
+
+
 
 
 using namespace std ;
 
 #define stat ;
-//#define verbose ;
+#define verbose ;
 
 /***********************************global**********************************/
 static double BENCHMARK = 0.1;
@@ -134,7 +137,7 @@ static thread_info* make_input(const int& dimension, const int& current_best){
   	std::default_random_engine generator (seed);
   	int local_u_bound = static_cast<int>(up_bound) ;
   	int local_l_bound = static_cast<int>(l_bound) ;
-  	uniform_real_distribution<int> distribution(local_l_bound, local_u_bound);
+  	uniform_int_distribution<int> distribution(local_l_bound, local_u_bound);
 	for(int i = 0 ; i < dimension ; ++i){
 		int x = distribution(generator)% local_u_bound;
 		int y = distribution(generator)% local_u_bound;

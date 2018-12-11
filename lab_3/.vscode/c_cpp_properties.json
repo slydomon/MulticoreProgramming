@@ -1,0 +1,37 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/Library/Developer/CommandLineTools/usr/include/c++/v1",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/lib/gcc/6/gcc/x86_64-apple-darwin17.3.0/6.4.0/include",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/tr1",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/tr2",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/parallel",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/ext",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/decimal",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/backward",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/bits",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/profile",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/experimental",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/include/c++/6.4.0/debug",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/lib/gcc/6/gcc/x86_64-apple-darwin17.3.0/6.4.0/include/ssp",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/lib/gcc/6/gcc/x86_64-apple-darwin17.3.0/6.4.0/include/sanitizer",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/lib/gcc/6/gcc/x86_64-apple-darwin17.3.0/6.4.0/include/cilk",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/lib/gcc/6/gcc/x86_64-apple-darwin17.3.0/6.4.0/include",
+                "/usr/local/Cellar/gcc@6/6.4.0_1/lib/gcc/6/gcc/x86_64-apple-darwin17.3.0/6.4.0/include/ssp"
+            ],
+            "defines": [],
+            "macFrameworkPath": [
+                "/Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk/System/Library/Frameworks"
+            ],
+            "compilerPath": "/usr/local/Cellar/gcc@6/6.4.0_1/bin/g++-6 -g -lgtest -lpthread",
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "clang-x64"
+        }
+    ],
+    "version": 4
+}

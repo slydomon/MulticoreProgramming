@@ -24,7 +24,6 @@ static vector<unsigned> best_genome ;
 static Maze* maze ;
 static pthread_mutex_t counter_lock = PTHREAD_MUTEX_INITIALIZER ;
 static pthread_mutex_t mix_counter_lock = PTHREAD_MUTEX_INITIALIZER ;
-//static pthread_mutex_t gene_bank_lock = PTHREAD_MUTEX_INITIALIZER ;
 
 typedef void* (*thread_func_ptr)(void*) ;
 
@@ -173,15 +172,10 @@ static void * thread_func_wrapper_mutator(void *arg)
     while(gene_bank.find(gene) != gene_bank.end()) ;
 
     unsigned int fitness = mut.count_fitness(maze) ;
-    #ifdef debug
-        //cout << "fitness: " << fitness << endl ;
-        //delete mut ;
-    #endif
     counter_decrease_and_check(fitness, mut) ;
-    population.insert(fitness, mut) ;
-    //test compact ;
     //genome compact = mut.compact() ;
     //population.insert(fitness, compact) ;
+    population.insert(fitness, mut) ;
     population.truncate(TRUNCATE_CONSTANT) ;
     return nullptr;
 }
@@ -252,8 +246,8 @@ int main(int argc, char** argv){
     //check if the gen_len can lead a solution
     if(!check_has_solution(maze->getStart(), maze->getFinish()))
     {
-        cout << "No solution is available because gen_len is not large enough" << endl ;
-        abort() ;
+        cout << "Warning: There is no way to reach the end point because gen_len is not large enough!!" << endl ;
+        //abort() ;
     }
 
     thread_pool pool_mix(mixer_threads) ;
