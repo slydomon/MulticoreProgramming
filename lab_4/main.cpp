@@ -4,7 +4,7 @@
 
 using namespace std ;
 
-//#define stat ;
+#define stat ;
 #define verbose ;
 //#define debug ;
 
@@ -114,10 +114,11 @@ static void counter_decrease_and_check(const int& fitness, const genome& mut)
     }
     if(counter > MUT_THRESHOLD)
     {
-        cout << "Reach the generation threshold" << endl ;
-        cout << "Genome: " << show_genome(best_genome) << endl ;
-        cout << "Current best fitness: " << current_fitness << endl;
-        exit(0) ; 
+        #ifdef verbose
+            cout << "Reach the generation threshold" << endl ;
+            cout << "Genome: " << show_genome(best_genome) << endl ;
+            cout << "Current best fitness: " << current_fitness << endl;
+        #endif
     }   
     pthread_mutex_unlock(&counter_lock) ;
 }
@@ -220,14 +221,15 @@ int main(int argc, char** argv){
 		cout << "**********************start calculating**********************"<<endl ;
 	#endif
 
+    //start count time
 	#ifdef stat
 		std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration<double>>  start_time = std::chrono::steady_clock::now();
 	#endif
 
     //init TRUNCATE_CONSTANT
     TRUNCATE_CONSTANT = NUM_THREADS * 4 ;
-    int mixer_threads = NUM_THREADS  / 3 ;
-    int mutate_threads = (NUM_THREADS) *2 / 3 ;
+    int mixer_threads = 3 ;
+    int mutate_threads = 5 ;
     if(mixer_threads < 1) mixer_threads = 1 ;
     if(mutate_threads < 1) mutate_threads = 1 ;
     #ifdef debug
@@ -238,10 +240,11 @@ int main(int argc, char** argv){
     //init maze
     maze = new Maze(ROW,COL) ;
 
-    //std::ostream os ;
-    cout << *maze << endl ; 
-    cout << "start point: (" << maze->getStart().col <<" , " << maze->getStart().row <<")" <<endl;
-    cout << "end point: (" << maze->getFinish().col <<" , " << maze->getFinish().row <<")" <<endl;
+    #ifdef verbose
+        cout << *maze << endl ; 
+        cout << "start point: (" << maze->getStart().col <<" , " << maze->getStart().row <<")" <<endl;
+        cout << "end point: (" << maze->getFinish().col <<" , " << maze->getFinish().row <<")" <<endl;
+    #endif
 
     //check if the gen_len can lead a solution
     if(!check_has_solution(maze->getStart(), maze->getFinish()))
@@ -282,28 +285,8 @@ int main(int argc, char** argv){
     }
     pool_mutate.thread_pool_run() ;
 
-    //fire all the thread in the thread pool
-    //main thread keeps updating until it meet the requirement.
-
-	/*int stop_counter = 0 ;  
-	timespec* time_rest = new timespec() ; 
-	time_rest->tv_sec = 0;
-	time_rest->tv_nsec = 11111111 ;
-
-    int population_limit = 10 ;*/
-
     int heartbeat = 10000000;
     do{
-  		//task* tmp = pool.thread_pool_aggregate_at_least(my_cmp, 20, time_rest, current_best, INIT_BEST) ;
-  		//task* tmp = pool.thread_pool_aggregate(my_cmp) ;mak
-  		
-  		/*if(stop_counter > NUM_THREADS* 100){
-  			timespec* time_rest = new timespec() ; 
-			time_rest->tv_sec = stop_counter/100;
-			nanosleep(time_rest, NULL)  ;
-			delete time_rest ;
-  		}*/
-
         if(!pool_mix.stop_add_task()){
   			pool_mix.add_task(new task(nullptr, thread_func_wrapper_mixer)) ;
   		}
@@ -327,7 +310,7 @@ int main(int argc, char** argv){
             }
         #endif
         
-    }while(current_fitness > 0) ;
+    }while(current_fitness > 0 && counter <= MUT_THRESHOLD) ;
     //cout << "finished" << endl ;
 
     #ifdef stat
@@ -337,22 +320,15 @@ int main(int argc, char** argv){
 
     pool_mutate.thread_pool_stop() ;
     pool_mix.thread_pool_stop() ;
-    //cout << "main end:"  << current_best << endl;
-    
 
     #ifdef stat
-	    #define MIN 0
-	    #define MAX 1
-	    #define AVG 2
-	    //vector<double> tmp = pool.calculate_time_stat() ;
-	    //int counter = pool.get_guess_counter()  ;
-	    //double total_time = time_span.count() ;
+	    double total_time = time_span.count() ;
 		#ifdef verbose
 			//print_sol(solution) ;
 		    //cout << fixed<<"Threads: " << NUM_THREADS <<" Dimension:" << dimension <<" Guesses: "<< guess <<" time: min:" << tmp[MIN] << " max:" <<tmp[MAX] << " avg:" << tmp[AVG] << " total:" << total_time << endl;
 		    cout << "**********************end calculating**********************"<<endl ;
 	    #else
-	    	//cout << fixed << NUM_THREADS <<" " << dimension << " " << guess << " " <<tmp[MIN] << " " << tmp[MAX] << " " << tmp[AVG] << " " <<  total_time << endl;
+	    	cout << NUM_THREADS << ROW << " " << COL << " " << total_time << " "<< current_fitness << endl;
 	    #endif
     
     #endif
