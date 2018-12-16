@@ -29,7 +29,7 @@
 
 
 //#define stat ;
-#define verbose ;
+//#define verbose ;
 //#define debug ;
 
 typedef void* (*thread_func_ptr)(void*) ;
